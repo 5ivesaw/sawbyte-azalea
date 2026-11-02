@@ -4,7 +4,7 @@ use std::{
 };
 
 use azalea_buf::{AzBuf, BufReadError};
-use azalea_core::{attribute_modifier_operation::AttributeModifierOperation, bitset::FixedBitSet};
+use azalea_core::attribute_modifier_operation::AttributeModifierOperation;
 use azalea_inventory::components::AttributeModifier;
 use azalea_registry::{
     builtin::{Attribute, MobEffect},
@@ -34,11 +34,13 @@ pub struct MobEffectFlags {
 
 impl AzBuf for MobEffectFlags {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
-        let bitset = FixedBitSet::<8>::azalea_read(buf)?;
-        let ambient = bitset.index(0);
-        let show_particles = bitset.index(1);
-        let show_icon = bitset.index(2);
-        let blend = bitset.index(3);
+        // Exactly one byte on the wire; avoid cross-crate generic_const_exprs
+        // inference for the fixed eight-bit case.
+        let flags = u8::azalea_read(buf)?;
+        let ambient = flags & 1 != 0;
+        let show_particles = flags & 2 != 0;
+        let show_icon = flags & 4 != 0;
+        let blend = flags & 8 != 0;
         Ok(Self {
             ambient,
             show_particles,
@@ -47,20 +49,11 @@ impl AzBuf for MobEffectFlags {
         })
     }
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
-        let mut bitset = FixedBitSet::<8>::new();
-        if self.ambient {
-            bitset.set(0);
-        }
-        if self.show_particles {
-            bitset.set(1);
-        }
-        if self.show_icon {
-            bitset.set(2);
-        }
-        if self.blend {
-            bitset.set(3);
-        }
-        bitset.azalea_write(buf)
+        let flags = u8::from(self.ambient)
+            | (u8::from(self.show_particles) << 1)
+            | (u8::from(self.show_icon) << 2)
+            | (u8::from(self.blend) << 3);
+        flags.azalea_write(buf)
     }
 }
 
